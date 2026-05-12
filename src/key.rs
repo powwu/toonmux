@@ -88,6 +88,6 @@ pub fn canonicalize_key(key: Key) -> Key {
         keys::constants::Hyper_R => keys::constants::Hyper_L,
         keys::constants::Shift_R => keys::constants::Shift_L,
         keys::constants::Super_R => keys::constants::Super_L,
-        _ => key.to_lower(),
+        _ => key,
     }
 }
