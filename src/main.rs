@@ -6,6 +6,7 @@ mod key;
 mod state;
 mod ui;
 mod xdo;
+mod keepalive;
 
 use crate::key::{canonicalize_key, key_name};
 use glib::Propagation;
@@ -399,6 +400,9 @@ fn main() -> Result<(), String> {
             toonmux_ref.main_window.resize(1, 1);
         });
     }
+
+    // Hook up keepalive toggle.
+    keepalive::start_keepalive(&toonmux, &state);
 
     // Hook up main binding buttons.
     macro_rules! connect_main_key_binder {

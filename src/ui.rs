@@ -24,6 +24,7 @@ pub struct Header {
     pub mirroring: gtk::Button,
     pub add: gtk::Button,
     pub remove: gtk::Button,
+    pub keepalivetoggle: gtk::ToggleButton,
 }
 
 pub struct Interface {
@@ -163,12 +164,16 @@ impl Header {
         remove.style_context().add_class("destructive-action");
         container.pack_start(&remove);
 
+        let keepalivetoggle = gtk::ToggleButton::with_label("Keep-Alive");
+        container.pack_start(&keepalivetoggle);
+
         Self {
             container,
             expand,
             mirroring,
             add,
             remove,
+            keepalivetoggle,
         }
     }
 
