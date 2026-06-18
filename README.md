@@ -33,7 +33,7 @@ specification](https://semver.org/spec/v2.0.0.html).
 ### How
 
 ```bash
-git clone https://github.com/JonathanHelianthicusDoe/toonmux.git
+git clone https://github.com/powwu/toonmux.git
 cd toonmux
 cargo rustc --release -- -C target-cpu=native
 strip ./target/release/toonmux
