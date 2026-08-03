@@ -124,6 +124,12 @@ impl Drop for Xdo {
     }
 }
 
+// SAFETY: libxdo uses Xlib which is thread-safe when XInitThreads() has been
+// called (GTK calls it during gtk::init()). The raw pointer is only used
+// through &self methods that do not mutate the xdo_t handle itself.
+unsafe impl Send for Xdo {}
+unsafe impl Sync for Xdo {}
+
 /// Return value has the same lifetime as `gstring`.
 #[inline(always)]
 fn gstring_as_ptr(gstring: &GString) -> *const c_char {

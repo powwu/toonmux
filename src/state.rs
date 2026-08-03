@@ -35,6 +35,7 @@ pub struct State {
     pub controllers: RwLock<Vec<Controller>>,
     pub routes: RwLock<FxHashMap<Key, Vec<(usize, Action)>>>,
     pub talking: AtomicBitSet,
+    pub raw_device: RwLock<Option<String>>,
 }
 
 #[derive(Debug)]
@@ -59,6 +60,7 @@ pub struct MainBindings {
     pub throw: AtomicKey,
     pub talk: AtomicKey,
     pub toggle_mirroring: AtomicKey,
+    pub camera_toggle: AtomicKey,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,6 +74,8 @@ pub struct Bindings {
     pub throw: AtomicKey,
     pub low_throw: AtomicKey,
     pub talk: AtomicKey,
+    pub keepalive: AtomicKey,
+    pub camera_toggle: AtomicKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +83,7 @@ pub enum Action {
     Simple(Key),
     LowThrow(Key),
     Talk(Key),
+    Keepalive(Key),
 }
 
 impl AtomicBitSet {
@@ -162,6 +167,7 @@ impl State {
                 ]),
                 routes: Default::default(),
                 talking: AtomicBitSet::new(),
+                raw_device: RwLock::new(None),
             })
             .map(|mut state| {
                 state.init();
@@ -207,6 +213,7 @@ impl State {
             controllers: RwLock::new(controllers),
             routes: Default::default(),
             talking: AtomicBitSet::new(),
+            raw_device: RwLock::new(None),
         };
         state.init();
 
@@ -245,6 +252,16 @@ impl State {
             route_action!(throw, Simple);
             route_action!(low_throw, LowThrow);
             route_action!(talk, Talk);
+            // keepalive always maps to Home regardless of main bindings.
+            {
+                let key = ctl.bindings.keepalive.load(Ordering::SeqCst);
+                if key != 0 {
+                    r_lk.entry(key.into())
+                        .or_insert_with(Vec::new)
+                        .push((ctl_ix, Action::Keepalive(keys::constants::Home)));
+                }
+            }
+            route_action!(camera_toggle, Simple);
         }
     }
 
@@ -257,6 +274,7 @@ impl State {
             || self.main_bindings.dismount.load(Ordering::SeqCst) == **key
             || self.main_bindings.throw.load(Ordering::SeqCst) == **key
             || self.main_bindings.talk.load(Ordering::SeqCst) == **key
+            || self.main_bindings.camera_toggle.load(Ordering::SeqCst) == **key
     }
 
     pub fn reroute_main(&self, old_key: &Key, new_key: &Key) {
@@ -445,6 +463,11 @@ impl MainBindings {
     pub fn low_throw(&self) -> Key {
         self.throw()
     }
+
+    #[inline(always)]
+    pub fn camera_toggle(&self) -> Key {
+        self.camera_toggle.load(Ordering::SeqCst).into()
+    }
 }
 
 impl Clone for MainBindings {
@@ -461,6 +484,9 @@ impl Clone for MainBindings {
             talk: AtomicKey::new(self.talk.load(Ordering::SeqCst)),
             toggle_mirroring: AtomicKey::new(
                 self.toggle_mirroring.load(Ordering::SeqCst),
+            ),
+            camera_toggle: AtomicKey::new(
+                self.camera_toggle.load(Ordering::SeqCst),
             ),
         }
     }
@@ -479,6 +505,7 @@ impl Default for MainBindings {
             throw: AtomicKey::new(*keys::constants::Delete),
             talk: AtomicKey::new(*keys::constants::Return),
             toggle_mirroring: AtomicKey::new(*keys::constants::Shift_L),
+            camera_toggle: AtomicKey::new(*keys::constants::Tab),
         }
     }
 }
@@ -496,6 +523,10 @@ impl Clone for Bindings {
             throw: AtomicKey::new(self.throw.load(Ordering::SeqCst)),
             low_throw: AtomicKey::new(self.low_throw.load(Ordering::SeqCst)),
             talk: AtomicKey::new(self.talk.load(Ordering::SeqCst)),
+            keepalive: AtomicKey::new(self.keepalive.load(Ordering::SeqCst)),
+            camera_toggle: AtomicKey::new(
+                self.camera_toggle.load(Ordering::SeqCst),
+            ),
         }
     }
 }
@@ -513,6 +544,8 @@ impl Default for Bindings {
             throw: AtomicKey::new(*keys::constants::Delete),
             low_throw: AtomicKey::new(*keys::constants::Insert),
             talk: AtomicKey::new(*keys::constants::Return),
+            keepalive: AtomicKey::new(*keys::constants::Home),
+            camera_toggle: AtomicKey::new(*keys::constants::Tab),
         }
     }
 }
@@ -524,6 +557,7 @@ impl Action {
             Self::Simple(key) => key,
             Self::LowThrow(key) => key,
             Self::Talk(key) => key,
+            Self::Keepalive(key) => key,
         }
     }
 
@@ -533,6 +567,7 @@ impl Action {
             Self::Simple(k) => *k = key,
             Self::LowThrow(k) => *k = key,
             Self::Talk(k) => *k = key,
+            Self::Keepalive(k) => *k = key,
         }
     }
 }

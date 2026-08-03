@@ -1,6 +1,6 @@
 [package]
 name = "toonmux"
-version = "0.0.9"
+version = "0.0.10"
 authors = ["JonathanHelianthicusDoe <augiii@protonmail.com>"]
 edition = "2021"
 description = "Toon multiplexer for playing Toontown on X11"
@@ -11,6 +11,7 @@ categories = ["games"]
 license = "GPL-3.0-or-later"
 
 [dependencies]
+evdev = "0.13.2"
 gdk = "0.18.0"
 glib = "0.18.5"
 gtk = "0.18.1"

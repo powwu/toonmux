@@ -9,7 +9,7 @@
 }:
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "toonmux";
-  version = "0.0.9";
+  version = "0.0.10";
 
   src = ./.;
 
@@ -22,6 +22,10 @@ rustPlatform.buildRustPackage (finalAttrs: {
     gtk3
     xdotool
   ];
+
+  postPatch = ''
+    cp -L ${./Cargo.lock} Cargo.lock
+  '';
 
   cargoLock = {
     lockFile = ./Cargo.lock;

@@ -30,7 +30,7 @@ pub fn key_name(key: Key) -> KeyName {
         keys::constants::Left => Static("\u{2190}"),
         keys::constants::Right => Static("\u{2192}"),
         keys::constants::BackSpace => Static("\u{232b}"),
-        keys::constants::Home => Static("\u{1f3e0}"),
+        keys::constants::Home => Static("Home"),
         keys::constants::Num_Lock => Static("\u{21ed}"),
         keys::constants::Pause => Static("\u{23f8}"),
         keys::constants::Return => Static("\u{21b5}"),

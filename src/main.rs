@@ -7,8 +7,10 @@ mod state;
 mod ui;
 mod xdo;
 mod keepalive;
+mod raw;
 
 use crate::key::{canonicalize_key, key_name};
+use gdk;
 use glib::Propagation;
 use gtk::{prelude::*, Dialog, DialogFlags, Label, ResponseType};
 use state::{Action, State};
@@ -112,6 +114,23 @@ fn main() -> Result<(), String> {
                                         if let Err(code) = state
                                             .xdo
                                             .send_key_down(window, key)
+                                        {
+                                            eprintln!(
+                                                "xdo: sending key down failed \
+                                                 with code {}.",
+                                                code,
+                                            );
+                                        }
+                                    }
+                                }
+                                Action::Keepalive(_) => {
+                                    if !talking {
+                                        if let Err(code) = state
+                                            .xdo
+                                            .send_key_down(
+                                                window,
+                                                &gdk::keys::constants::Home,
+                                            )
                                         {
                                             eprintln!(
                                                 "xdo: sending key down failed \
@@ -254,6 +273,21 @@ fn main() -> Result<(), String> {
                                             );
                                         }
                                     }
+                                    Action::Keepalive(_) => {
+                                        if let Err(code) = state
+                                            .xdo
+                                            .send_key_up(
+                                                window,
+                                                &gdk::keys::constants::Home,
+                                            )
+                                        {
+                                            eprintln!(
+                                                "xdo: sending key up failed \
+                                                 with code {}",
+                                                code,
+                                            );
+                                        }
+                                    }
                                     Action::LowThrow(_) => (),
                                     Action::Talk(_) => (),
                                 }
@@ -291,12 +325,16 @@ fn main() -> Result<(), String> {
             if !prev_hidden {
                 toonmux_ref.header.add.hide();
                 toonmux_ref.header.remove.hide();
+                toonmux_ref.header.keepalivetoggle.hide();
+                toonmux_ref.header.mode_combo.hide();
                 toonmux_ref.interface.container.hide();
                 toonmux_ref.main_window.resize(1, 1);
             } else {
                 toonmux_ref.interface.container.show();
                 toonmux_ref.header.add.show();
                 toonmux_ref.header.remove.show();
+                toonmux_ref.header.keepalivetoggle.show();
+                toonmux_ref.header.mode_combo.show();
             }
         });
     }
@@ -404,6 +442,45 @@ fn main() -> Result<(), String> {
     // Hook up keepalive toggle.
     keepalive::start_keepalive(&toonmux, &state);
 
+    // Hook up mode combo (Normal / Raw).
+    {
+        let state = Arc::clone(&state);
+        let toonmux_ref = Arc::clone(&toonmux);
+        // Use a RefCell so the RawHandle can be stored/dropped on the GTK thread.
+        let raw_handle: std::cell::RefCell<Option<raw::RawHandle>> =
+            std::cell::RefCell::new(None);
+        toonmux.header.mode_combo.connect_changed(move |combo| {
+            match combo.active() {
+                Some(1) => {
+                    // Raw mode: pick device if not yet chosen.
+                    let device = {
+                        let guard = state.raw_device.read().unwrap();
+                        guard.clone()
+                    };
+                    let device = device.or_else(|| {
+                        let chosen =
+                            raw::pick_device(&toonmux_ref.main_window);
+                        if let Some(ref path) = chosen {
+                            *state.raw_device.write().unwrap() =
+                                Some(path.clone());
+                        }
+                        chosen
+                    });
+                    if let Some(path) = device {
+                        *raw_handle.borrow_mut() =
+                            Some(raw::start_raw(path, Arc::clone(&state)));
+                    } else {
+                        // User cancelled — revert to Normal.
+                        combo.set_active(Some(0));
+                    }
+                }
+                _ => {
+                    // Normal mode: drop the raw handle to stop the thread.
+                    *raw_handle.borrow_mut() = None;
+                }
+            }
+        });
+    }
     // Hook up main binding buttons.
     macro_rules! connect_main_key_binder {
         ( $key_id:ident, $key_name:expr, $needs_reroute:expr ) => {{
@@ -550,6 +627,7 @@ fn main() -> Result<(), String> {
     connect_main_key_binder!(dismount, "dismount", true);
     connect_main_key_binder!(throw, "throw", true);
     connect_main_key_binder!(toggle_mirroring, "toggle mirroring", false);
+    connect_main_key_binder!(camera_toggle, "camera toggle", true);
 
     // Hook up controller UI buttons.
     hook_up_controller_uis(&state, &toonmux, dialog_flags);
@@ -762,6 +840,92 @@ fn hook_up_controller_ui(
     connect_key_binder!(throw, "throw", Simple);
     connect_key_binder!(low_throw, "low throw", LowThrow);
     connect_key_binder!(talk, "talk", Talk);
+    // "gags" always maps to Home; wire it up manually.
+    {
+        let state = Arc::clone(state);
+        let toonmux = Arc::clone(toonmux);
+        ctl_ui.keepalive.connect_clicked(move |this| {
+            let key_choose_dialog = Dialog::with_buttons(
+                Some("Binding \u{201c}gags\u{201d} key"),
+                Some(&toonmux.main_window),
+                dialog_flags,
+                &[
+                    ("Clear", ResponseType::Other(0)),
+                    ("Cancel", ResponseType::Cancel),
+                ],
+            );
+            key_choose_dialog.content_area().pack_start(
+                &Label::new(Some(
+                    "Press a key to be bound to \u{201c}gags\u{201d}.",
+                )),
+                true,
+                false,
+                4,
+            );
+
+            {
+                let state = Arc::clone(&state);
+                key_choose_dialog.connect_key_press_event(move |kcd, e| {
+                    let new_key = canonicalize_key(e.keyval());
+                    let old_key = state.controllers.read().unwrap()[ctl_ix]
+                        .bindings
+                        .keepalive
+                        .swap(*new_key, Ordering::SeqCst);
+
+                    if old_key == *new_key {
+                        kcd.response(ResponseType::Cancel);
+                        return Propagation::Proceed;
+                    }
+
+                    let main_key = gdk::keys::constants::Home;
+                    state.reroute(
+                        ctl_ix,
+                        &old_key.into(),
+                        &new_key,
+                        &main_key,
+                        Some(Action::Keepalive(main_key)),
+                    );
+
+                    kcd.response(ResponseType::Accept);
+                    Propagation::Proceed
+                });
+            }
+
+            key_choose_dialog.show_all();
+            let resp = key_choose_dialog.run();
+            unsafe { key_choose_dialog.destroy(); }
+
+            match resp {
+                ResponseType::Accept => this.set_label(
+                    key_name(
+                        state.controllers.read().unwrap()[ctl_ix]
+                            .bindings
+                            .keepalive
+                            .load(Ordering::SeqCst)
+                            .into(),
+                    )
+                    .as_str(),
+                ),
+                ResponseType::Other(0) => {
+                    let old_key = state.controllers.read().unwrap()[ctl_ix]
+                        .bindings
+                        .keepalive
+                        .swap(0, Ordering::SeqCst);
+                    let main_key = gdk::keys::constants::Home;
+                    state.reroute(
+                        ctl_ix,
+                        &old_key.into(),
+                        &0u32.into(),
+                        &main_key,
+                        None,
+                    );
+                    this.set_label("");
+                }
+                _ => (),
+            }
+        });
+    }
+    connect_key_binder!(camera_toggle, "camera toggle", Simple);
 }
 
 fn hook_up_mirror_menu(

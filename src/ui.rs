@@ -3,6 +3,7 @@ use crate::{
     key::key_name,
     state::{self, State},
 };
+use gdk;
 use glib::Propagation;
 use gtk::prelude::*;
 use serde_json;
@@ -25,6 +26,8 @@ pub struct Header {
     pub add: gtk::Button,
     pub remove: gtk::Button,
     pub keepalivetoggle: gtk::ToggleButton,
+    pub mode_combo: gtk::ComboBoxText,
+    pub shape_combo: gtk::ComboBox,
 }
 
 pub struct Interface {
@@ -44,6 +47,8 @@ struct LabelRow {
     throw_label: gtk::Label,
     low_throw_label: gtk::Label,
     talk_label: gtk::Label,
+    keepalive_label: gtk::Label,
+    camera_toggle_label: gtk::Label,
 }
 
 pub struct MainBindingsRow {
@@ -57,6 +62,8 @@ pub struct MainBindingsRow {
     pub dismount: gtk::Button,
     pub throw: gtk::Button,
     pub toggle_mirroring: gtk::Button,
+    pub keepalive_label: gtk::Label,
+    pub camera_toggle: gtk::Button,
 }
 
 pub struct ControllerUi {
@@ -71,6 +78,8 @@ pub struct ControllerUi {
     pub throw: gtk::Button,
     pub low_throw: gtk::Button,
     pub talk: gtk::Button,
+    pub keepalive: gtk::Button,
+    pub camera_toggle: gtk::Button,
 }
 
 pub struct Mirror {
@@ -89,6 +98,7 @@ impl Toonmux {
         main_window.add(&interface.container);
 
         main_window.set_title("toonmux");
+        main_window.set_type_hint(gdk::WindowTypeHint::Dialog);
         // The icon that the app will display.
         //Window::set_default_icon_name("iconname");
 
@@ -153,7 +163,7 @@ impl Header {
         let expand = gtk::Button::with_label("\u{22ee}");
         container.pack_start(&expand);
 
-        let mirroring = gtk::Button::with_label("\u{22a3}");
+        let mirroring = gtk::Button::with_label("\u{f24d}");
         container.pack_start(&mirroring);
 
         let add = gtk::Button::with_label("+");
@@ -167,6 +177,39 @@ impl Header {
         let keepalivetoggle = gtk::ToggleButton::with_label("Keep-Alive");
         container.pack_start(&keepalivetoggle);
 
+        let mode_combo = gtk::ComboBoxText::new();
+        mode_combo.append_text("Normal");
+        mode_combo.append_text("Raw");
+        mode_combo.set_active(Some(0));
+        container.pack_start(&mode_combo);
+
+        let shape_store = gtk::ListStore::new(&[
+            glib::Type::STRING,
+            glib::Type::STRING,
+        ]);
+        // (glyph, foreground color): red circle, green square, red square,
+        // blue diamond
+        for (glyph, color) in &[
+            ("\u{25a0}", "#cc0000"),
+            ("\u{25b2}", "#00aa00"),
+            ("\u{2605}", "#ccaa00"),
+            ("\u{25c6}", "#0055cc"),
+            ("\u{25cf}", "#8800cc"),
+        ] {
+            shape_store.insert_with_values(
+                None,
+                &[(0, glyph), (1, color)],
+            );
+        }
+        let shape_combo = gtk::ComboBox::with_model(&shape_store);
+        let shape_cell = gtk::CellRendererText::new();
+        shape_cell.set_property("size-points", 14.0_f64);
+        shape_combo.pack_start(&shape_cell, true);
+        shape_combo.add_attribute(&shape_cell, "text", 0);
+        shape_combo.add_attribute(&shape_cell, "foreground", 1);
+        shape_combo.set_active(Some(0));
+        container.pack_start(&shape_combo);
+
         Self {
             container,
             expand,
@@ -174,14 +217,16 @@ impl Header {
             add,
             remove,
             keepalivetoggle,
+            mode_combo,
+            shape_combo,
         }
     }
 
     pub fn change_mirroring(&self, to: bool) {
         if to {
-            self.mirroring.set_label("\u{22a3}");
+            self.mirroring.set_label("\u{f24d}");
         } else {
-            self.mirroring.set_label("\u{1f6c7}");
+            self.mirroring.set_label("\u{f127}");
         }
     }
 }
@@ -249,6 +294,10 @@ impl Interface {
             .attach(&self.label_row.low_throw_label, 9, 0, 1, 1);
         self.container
             .attach(&self.label_row.talk_label, 10, 0, 1, 1);
+        self.container
+            .attach(&self.label_row.keepalive_label, 11, 0, 1, 1);
+        self.container
+            .attach(&self.label_row.camera_toggle_label, 12, 0, 1, 1);
 
         self.container.attach(
             &self.main_bindings_row.window_label,
@@ -278,6 +327,10 @@ impl Interface {
             .attach(&self.main_bindings_row.dismount, 7, 1, 1, 1);
         self.container
             .attach(&self.main_bindings_row.throw, 8, 1, 1, 1);
+        self.container
+            .attach(&self.main_bindings_row.keepalive_label, 11, 1, 1, 1);
+        self.container
+            .attach(&self.main_bindings_row.camera_toggle, 12, 1, 1, 1);
 
         for (i, ctl_ui) in self
             .controller_uis
@@ -298,6 +351,8 @@ impl Interface {
             self.container.attach(&ctl_ui.throw, 8, 2 + i, 1, 1);
             self.container.attach(&ctl_ui.low_throw, 9, 2 + i, 1, 1);
             self.container.attach(&ctl_ui.talk, 10, 2 + i, 1, 1);
+            self.container.attach(&ctl_ui.keepalive, 11, 2 + i, 1, 1);
+            self.container.attach(&ctl_ui.camera_toggle, 12, 2 + i, 1, 1);
         }
     }
 
@@ -324,6 +379,10 @@ impl Interface {
         self.container
             .attach(&ctl_ui.low_throw, 9, 2 + ctl_ix, 1, 1);
         self.container.attach(&ctl_ui.talk, 10, 2 + ctl_ix, 1, 1);
+        self.container
+            .attach(&ctl_ui.keepalive, 11, 2 + ctl_ix, 1, 1);
+        self.container
+            .attach(&ctl_ui.camera_toggle, 12, 2 + ctl_ix, 1, 1);
 
         self.controller_uis.write().unwrap().push(ctl_ui);
 
@@ -357,6 +416,8 @@ impl LabelRow {
             throw_label: gtk::Label::new(Some("throw")),
             low_throw_label: gtk::Label::new(Some("low throw")),
             talk_label: gtk::Label::new(Some("talk")),
+            keepalive_label: gtk::Label::new(Some("gags")),
+            camera_toggle_label: gtk::Label::new(Some("camera")),
         }
     }
 }
@@ -389,6 +450,12 @@ impl MainBindingsRow {
             ),
             toggle_mirroring: gtk::Button::with_label(
                 key_name(state.main_bindings.toggle_mirroring()).as_str(),
+            ),
+            keepalive_label: gtk::Label::new(Some(
+                key_name(gdk::keys::constants::Home).as_str(),
+            )),
+            camera_toggle: gtk::Button::with_label(
+                key_name(state.main_bindings.camera_toggle()).as_str(),
             ),
         }
     }
@@ -464,6 +531,22 @@ impl ControllerUi {
                 )
                 .as_str(),
             ),
+            keepalive: gtk::Button::with_label(
+                key_name(
+                    ctl_state.bindings.keepalive.load(Ordering::SeqCst).into(),
+                )
+                .as_str(),
+            ),
+            camera_toggle: gtk::Button::with_label(
+                key_name(
+                    ctl_state
+                        .bindings
+                        .camera_toggle
+                        .load(Ordering::SeqCst)
+                        .into(),
+                )
+                .as_str(),
+            ),
         }
     }
 
@@ -480,6 +563,8 @@ impl ControllerUi {
         container.remove(&self.throw);
         container.remove(&self.low_throw);
         container.remove(&self.talk);
+        container.remove(&self.keepalive);
+        container.remove(&self.camera_toggle);
     }
 }
 
