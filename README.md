@@ -1,8 +1,4 @@
-# toonmux
-
-[![crates.io](https://img.shields.io/crates/v/toonmux)](https://crates.io/crates/toonmux)
-[![GPL v3+](https://img.shields.io/badge/license-GNU%20GPL%20v3%2B-bd0000)](./LICENSE)
-[![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/JonathanHelianthicusDoe/toonmux)](https://github.com/JonathanHelianthicusDoe/toonmux)
+# toonmux: powwu's edition (toonmux:pe)
 
 Multi-toon controller for
 [Toontown](https://en.wikipedia.org/wiki/Toontown_Online)-based MMORPGs. Uses

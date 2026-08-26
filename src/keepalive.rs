@@ -11,13 +11,11 @@ use gtk::prelude::ToggleButtonExt;
 fn keepalive_cycle(toonmux: &Arc<Toonmux>, state: &Arc<State>) {
     if toonmux.header.keepalivetoggle.is_active() {
         let ctls = state.controllers.read().unwrap();
-        for window in ctls
-            .iter()
-            .map(|ctl| ctl.window.load(Ordering::SeqCst))
-        {
-            if let Err(code) =
-                state.xdo.send_key(window, &gdk::keys::constants::Home)
-            {
+        for ctl in ctls.iter() {
+            let window = ctl.window.load(Ordering::SeqCst);
+            let xdo_guard = ctl.xdo.lock().unwrap();
+            let xdo = xdo_guard.as_ref().unwrap_or(&state.xdo);
+            if let Err(code) = xdo.send_key(window, &gdk::keys::constants::Home) {
                 eprintln!(
                     "xdo: sending key down failed with code {}.",
                     code,

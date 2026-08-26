@@ -16,10 +16,60 @@ use gtk::{prelude::*, Dialog, DialogFlags, Label, ResponseType};
 use state::{Action, State};
 use std::sync::{atomic::Ordering, Arc};
 
+#[inline]
+fn send_key_down(state: &state::State, ctl: &state::Controller, key: &gdk::keys::Key) {
+    let window = ctl.window.load(Ordering::SeqCst);
+    let xdo_guard = ctl.xdo.lock().unwrap();
+    let xdo = xdo_guard.as_ref().unwrap_or(&state.xdo);
+    if let Err(code) = xdo.send_key_down(window, key) {
+        eprintln!("xdo: sending key down failed with code {}.", code);
+    }
+}
+
+#[inline]
+fn send_key_up(state: &state::State, ctl: &state::Controller, key: &gdk::keys::Key) {
+    let window = ctl.window.load(Ordering::SeqCst);
+    let xdo_guard = ctl.xdo.lock().unwrap();
+    let xdo = xdo_guard.as_ref().unwrap_or(&state.xdo);
+    if let Err(code) = xdo.send_key_up(window, key) {
+        eprintln!("xdo: sending key up failed with code {}.", code);
+    }
+}
+
+#[inline]
+fn send_key(state: &state::State, ctl: &state::Controller, key: &gdk::keys::Key) {
+    let window = ctl.window.load(Ordering::SeqCst);
+    let xdo_guard = ctl.xdo.lock().unwrap();
+    let xdo = xdo_guard.as_ref().unwrap_or(&state.xdo);
+    if let Err(code) = xdo.send_key(window, key) {
+        eprintln!("xdo: sending key failed with code {}.", code);
+    }
+}
+
+#[inline]
+fn send_key_shifted(state: &state::State, ctl: &state::Controller, key: &gdk::keys::Key) {
+    let window = ctl.window.load(Ordering::SeqCst);
+    let xdo_guard = ctl.xdo.lock().unwrap();
+    let xdo = xdo_guard.as_ref().unwrap_or(&state.xdo);
+    if let Err(code) = xdo.send_key_shifted(window, key) {
+        eprintln!("xdo: sending shifted key failed with code {}.", code);
+    }
+}
+
 fn main() -> Result<(), String> {
     // Initialize GTK.
     if gtk::init().is_err() {
         return Err("Failed to initialize GTK".to_owned());
+    }
+
+    {
+        let css = gtk::CssProvider::new();
+        css.load_from_data(b".autofill-button { background: #c9920e; color: #fff; font-family: 'Font Awesome 6 Free'; font-weight: 400; font-size: 14px; }").ok();
+        gtk::StyleContext::add_provider_for_screen(
+            &gdk::Screen::default().unwrap(),
+            &css,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
     }
 
     // Initialize internal state.
@@ -56,19 +106,8 @@ fn main() -> Result<(), String> {
                 // lock.
                 let ctls = state.controllers.read().unwrap();
 
-                for window in state
-                    .talking
-                    .iter()
-                    .map(|i| ctls[i].window.load(Ordering::SeqCst))
-                {
-                    if let Err(code) =
-                        state.xdo.send_key_down(window, &event_key)
-                    {
-                        eprintln!(
-                            "xdo: sending key down failed with code {}.",
-                            code,
-                        );
-                    }
+                for i in state.talking.iter() {
+                    send_key_down(&state, &ctls[i], &event_key);
                 }
 
                 // Relinquishing read lock on the controller state
@@ -105,52 +144,20 @@ fn main() -> Result<(), String> {
                             usize,
                             &state::Controller,
                         )| {
-                            let window =
-                                controller.window.load(Ordering::SeqCst);
-
                             match action {
                                 Action::Simple(key) => {
                                     if !talking {
-                                        if let Err(code) = state
-                                            .xdo
-                                            .send_key_down(window, key)
-                                        {
-                                            eprintln!(
-                                                "xdo: sending key down failed \
-                                                 with code {}.",
-                                                code,
-                                            );
-                                        }
+                                        send_key_down(&state, controller, key);
                                     }
                                 }
                                 Action::Keepalive(_) => {
                                     if !talking {
-                                        if let Err(code) = state
-                                            .xdo
-                                            .send_key_down(
-                                                window,
-                                                &gdk::keys::constants::Home,
-                                            )
-                                        {
-                                            eprintln!(
-                                                "xdo: sending key down failed \
-                                                 with code {}.",
-                                                code,
-                                            );
-                                        }
+                                        send_key_down(&state, controller, &gdk::keys::constants::Home);
                                     }
                                 }
                                 Action::LowThrow(key) => {
                                     if !talking {
-                                        if let Err(code) =
-                                            state.xdo.send_key(window, key)
-                                        {
-                                            eprintln!(
-                                                "xdo: sending key failed with \
-                                                 code {}.",
-                                                code,
-                                            );
-                                        }
+                                        send_key(&state, controller, key);
                                     }
                                 }
                                 Action::Talk(key) => {
@@ -160,33 +167,16 @@ fn main() -> Result<(), String> {
                                         let was_talking = state
                                             .talking
                                             .toggle(mirrored_or_ctl_ix);
-
-                                        // If this controller was in the
-                                        // "talking" state before, then we've
-                                        // already sent a key down.  So we just
-                                        // send the corresponding key up here.
                                         if was_talking {
-                                            if let Err(code) = state
-                                                .xdo
-                                                .send_key_up(window, key)
-                                            {
-                                                eprintln!(
-                                                    "xdo: sending key up \
-                                                     failed with code {}.",
-                                                    code,
-                                                );
-                                            }
+                                            send_key_up(&state, controller, key);
                                         } else {
-                                            if let Err(code) =
-                                                state.xdo.send_key(window, key)
-                                            {
-                                                eprintln!(
-                                                    "xdo: sending key failed \
-                                                     with code {}.",
-                                                    code,
-                                                );
-                                            }
+                                            send_key(&state, controller, key);
                                         }
+                                    }
+                                }
+                                Action::Debug(key) => {
+                                    if !talking {
+                                        send_key_shifted(&state, controller, key);
                                     }
                                 }
                             }
@@ -223,19 +213,8 @@ fn main() -> Result<(), String> {
                 // lock.
                 let ctls = state.controllers.read().unwrap();
 
-                for window in state
-                    .talking
-                    .iter()
-                    .map(|i| ctls[i].window.load(Ordering::SeqCst))
-                {
-                    if let Err(code) =
-                        state.xdo.send_key_up(window, &event_key)
-                    {
-                        eprintln!(
-                            "xdo: sending key up failed with code {}.",
-                            code,
-                        );
-                    }
+                for i in state.talking.iter() {
+                    send_key_up(&state, &ctls[i], &event_key);
                 }
 
             // Relinquishing read lock on the controller state reader-writer
@@ -258,38 +237,16 @@ fn main() -> Result<(), String> {
 
                         let handle_action =
                             |controller: &state::Controller| {
-                                let window =
-                                    controller.window.load(Ordering::SeqCst);
-
                                 match action {
                                     Action::Simple(key) => {
-                                        if let Err(code) =
-                                            state.xdo.send_key_up(window, key)
-                                        {
-                                            eprintln!(
-                                                "xdo: sending key up failed \
-                                                 with code {}",
-                                                code,
-                                            );
-                                        }
+                                        send_key_up(&state, controller, key);
                                     }
                                     Action::Keepalive(_) => {
-                                        if let Err(code) = state
-                                            .xdo
-                                            .send_key_up(
-                                                window,
-                                                &gdk::keys::constants::Home,
-                                            )
-                                        {
-                                            eprintln!(
-                                                "xdo: sending key up failed \
-                                                 with code {}",
-                                                code,
-                                            );
-                                        }
+                                        send_key_up(&state, controller, &gdk::keys::constants::Home);
                                     }
                                     Action::LowThrow(_) => (),
                                     Action::Talk(_) => (),
+                                    Action::Debug(_) => (),
                                 }
                             };
 
@@ -628,9 +585,69 @@ fn main() -> Result<(), String> {
     connect_main_key_binder!(throw, "throw", true);
     connect_main_key_binder!(toggle_mirroring, "toggle mirroring", false);
     connect_main_key_binder!(camera_toggle, "camera toggle", true);
+    connect_main_key_binder!(tasks, "tasks", true);
 
     // Hook up controller UI buttons.
     hook_up_controller_uis(&state, &toonmux, dialog_flags);
+
+    // Hook up autofill button.
+    {
+        let state = Arc::clone(&state);
+        let toonmux_ref = Arc::clone(&toonmux);
+        toonmux.interface.autofill_button.connect_clicked(move |_| {
+            let mut windows = xdo::find_toon_windows();
+            if windows.is_empty() {
+                return;
+            }
+
+            // If both games are present, ask which one to fill.
+            let has_clash = windows.iter().any(|w| w.game == xdo::ToonGame::CorporateClash);
+            let has_ttr   = windows.iter().any(|w| w.game == xdo::ToonGame::ToontownRewritten);
+            if has_clash && has_ttr {
+                let dialog = gtk::Dialog::with_buttons(
+                    Some("Autofill — choose game"),
+                    Some(&toonmux_ref.main_window),
+                    dialog_flags,
+                    &[
+                        ("Corporate Clash",     gtk::ResponseType::Other(0)),
+                        ("Toontown Rewritten",  gtk::ResponseType::Other(1)),
+                        ("Cancel",              gtk::ResponseType::Cancel),
+                    ],
+                );
+                dialog.show_all();
+                let resp = dialog.run();
+                unsafe { dialog.destroy(); }
+                match resp {
+                    gtk::ResponseType::Other(0) =>
+                        windows.retain(|w| w.game == xdo::ToonGame::CorporateClash),
+                    gtk::ResponseType::Other(1) =>
+                        windows.retain(|w| w.game == xdo::ToonGame::ToontownRewritten),
+                    _ => return,
+                }
+            }
+
+            let ctls = state.controllers.read().unwrap();
+            let ctl_uis = toonmux_ref.interface.controller_uis.read().unwrap();
+            for (i, toon_win) in windows.iter().enumerate() {
+                if i >= ctls.len() {
+                    break;
+                }
+                let old = ctls[i].window.swap(toon_win.window, Ordering::SeqCst);
+                // Create a per-controller xdo handle for the nested display.
+                *ctls[i].xdo.lock().unwrap() =
+                    xdo::Xdo::for_display(&toon_win.display);
+                let pw = &ctl_uis[i].pick_window;
+                if toon_win.window != 0 {
+                    if old == 0 {
+                        pw.set_label("-");
+                        let ctx = pw.style_context();
+                        ctx.remove_class("suggested-action");
+                        ctx.add_class("destructive-action");
+                    }
+                }
+            }
+        });
+    }
 
     // Make all the widgets within the UI visible.
     toonmux.main_window.show_all();
@@ -668,30 +685,28 @@ fn hook_up_controller_ui(
     {
         let state = Arc::clone(state);
         ctl_ui.pick_window.connect_clicked(move |pw| {
-            if let Some(new_window) = state.xdo.select_window_with_click() {
-                // Getting a read lock on the controller state reader-writer
-                // lock.
-                let ctls = state.controllers.read().unwrap();
-
-                let ctl = &ctls[ctl_ix];
-                let old_window = ctl.window.swap(new_window, Ordering::SeqCst);
-
-                if new_window != old_window {
-                    if old_window == 0 {
-                        pw.set_label("\u{2213}"); // 00b1
-                        let pw_style_ctx = pw.style_context();
-                        pw_style_ctx.remove_class("suggested-action");
-                        pw_style_ctx.add_class("destructive-action");
-                    } else if new_window == 0 {
-                        pw.set_label("+");
-                        let pw_style_ctx = pw.style_context();
-                        pw_style_ctx.remove_class("destructive-action");
-                        pw_style_ctx.add_class("suggested-action");
-                    }
+            let ctls = state.controllers.read().unwrap();
+            let ctl = &ctls[ctl_ix];
+            let current = ctl.window.load(Ordering::SeqCst);
+            if current != 0 {
+                // Slot occupied — clear it.
+                ctl.window.store(0, Ordering::SeqCst);
+                *ctl.xdo.lock().unwrap() = None;
+                pw.set_label("+");
+                let ctx = pw.style_context();
+                ctx.remove_class("destructive-action");
+                ctx.add_class("suggested-action");
+            } else {
+                // Slot empty — pick a window.
+                drop(ctls);
+                if let Some(new_window) = state.xdo.select_window_with_click() {
+                    let ctls = state.controllers.read().unwrap();
+                    ctls[ctl_ix].window.store(new_window, Ordering::SeqCst);
+                    pw.set_label("-");
+                    let ctx = pw.style_context();
+                    ctx.remove_class("suggested-action");
+                    ctx.add_class("destructive-action");
                 }
-
-                // Relinquishing read lock on the controller state
-                // reader-writer lock.
             }
         });
     }
@@ -840,7 +855,6 @@ fn hook_up_controller_ui(
     connect_key_binder!(throw, "throw", Simple);
     connect_key_binder!(low_throw, "low throw", LowThrow);
     connect_key_binder!(talk, "talk", Talk);
-    // "gags" always maps to Home; wire it up manually.
     {
         let state = Arc::clone(state);
         let toonmux = Arc::clone(toonmux);
@@ -926,6 +940,92 @@ fn hook_up_controller_ui(
         });
     }
     connect_key_binder!(camera_toggle, "camera toggle", Simple);
+    connect_key_binder!(tasks, "tasks", Simple);
+    // debug always sends shift+F1; wire it up manually.
+    {
+        let state = Arc::clone(state);
+        let toonmux = Arc::clone(toonmux);
+        ctl_ui.debug.connect_clicked(move |this| {
+            let key_choose_dialog = Dialog::with_buttons(
+                Some("Binding \u{201c}debug\u{201d} key"),
+                Some(&toonmux.main_window),
+                dialog_flags,
+                &[
+                    ("Clear", ResponseType::Other(0)),
+                    ("Cancel", ResponseType::Cancel),
+                ],
+            );
+            key_choose_dialog.content_area().pack_start(
+                &Label::new(Some(
+                    "Press a key to be bound to \u{201c}debug\u{201d}.",
+                )),
+                true,
+                false,
+                4,
+            );
+
+            {
+                let state = Arc::clone(&state);
+                key_choose_dialog.connect_key_press_event(move |kcd, e| {
+                    let new_key = canonicalize_key(e.keyval());
+                    let old_key = state.controllers.read().unwrap()[ctl_ix]
+                        .bindings
+                        .debug
+                        .swap(*new_key, Ordering::SeqCst);
+
+                    if old_key == *new_key {
+                        kcd.response(ResponseType::Cancel);
+                        return Propagation::Proceed;
+                    }
+
+                    let main_key = gdk::keys::constants::F1;
+                    state.reroute(
+                        ctl_ix,
+                        &old_key.into(),
+                        &new_key,
+                        &main_key,
+                        Some(Action::Debug(main_key)),
+                    );
+
+                    kcd.response(ResponseType::Accept);
+                    Propagation::Proceed
+                });
+            }
+
+            key_choose_dialog.show_all();
+            let resp = key_choose_dialog.run();
+            unsafe { key_choose_dialog.destroy(); }
+
+            match resp {
+                ResponseType::Accept => this.set_label(
+                    key_name(
+                        state.controllers.read().unwrap()[ctl_ix]
+                            .bindings
+                            .debug
+                            .load(Ordering::SeqCst)
+                            .into(),
+                    )
+                    .as_str(),
+                ),
+                ResponseType::Other(0) => {
+                    let old_key = state.controllers.read().unwrap()[ctl_ix]
+                        .bindings
+                        .debug
+                        .swap(0, Ordering::SeqCst);
+                    let main_key = gdk::keys::constants::F1;
+                    state.reroute(
+                        ctl_ix,
+                        &old_key.into(),
+                        &0u32.into(),
+                        &main_key,
+                        None,
+                    );
+                    this.set_label("");
+                }
+                _ => (),
+            }
+        });
+    }
 }
 
 fn hook_up_mirror_menu(

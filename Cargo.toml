@@ -1,10 +1,10 @@
 [package]
-name = "toonmux"
+name = "toonmux-pe"
 version = "0.0.10"
-authors = ["JonathanHelianthicusDoe <augiii@protonmail.com>"]
+authors = ["powwu"]
 edition = "2021"
-description = "Toon multiplexer for playing Toontown on X11"
-repository = "https://github.com/JonathanHelianthicusDoe/toonmux"
+description = "toonmux: powwu's edition - Toon multiplexer for playing Toontown on X11"
+repository = "https://github.com/powwu/toonmux"
 readme = "README.md"
 keywords = ["toontown", "ttr", "x11", "controller", "multiplexer"]
 categories = ["games"]
@@ -15,11 +15,12 @@ evdev = "0.13.2"
 gdk = "0.18.0"
 glib = "0.18.5"
 gtk = "0.18.1"
+libc = "0.2"
 libxdo-sys = "0.11.0"
 rustc-hash = "2.0.0"
 serde = { version = "1.0.193", features = ["derive"] }
 serde_json = "1.0.108"
-x11 = "2.21.0"
+x11 = { version = "2.21.0", features = ["xlib"] }
 
 [profile.release]
 opt-level = 3

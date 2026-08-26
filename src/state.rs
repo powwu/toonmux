@@ -47,6 +47,9 @@ pub struct Controller {
     pub mirror: AtomicUsize,
     pub mirrored: AtomicBitSet,
     pub bindings: Bindings,
+    /// Per-controller xdo handle for nested displays. When set, key sends use
+    /// this instead of the global xdo.
+    pub xdo: std::sync::Mutex<Option<crate::xdo::Xdo>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -61,6 +64,7 @@ pub struct MainBindings {
     pub talk: AtomicKey,
     pub toggle_mirroring: AtomicKey,
     pub camera_toggle: AtomicKey,
+    pub tasks: AtomicKey,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -76,6 +80,8 @@ pub struct Bindings {
     pub talk: AtomicKey,
     pub keepalive: AtomicKey,
     pub camera_toggle: AtomicKey,
+    pub debug: AtomicKey,
+    pub tasks: AtomicKey,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,6 +90,7 @@ pub enum Action {
     LowThrow(Key),
     Talk(Key),
     Keepalive(Key),
+    Debug(Key),
 }
 
 impl AtomicBitSet {
@@ -163,15 +170,45 @@ impl State {
                 controllers: RwLock::new(vec![
                     Default::default(),
                     Default::default(),
-                    Default::default(),
+                    Controller {
+                        window: AtomicU64::new(0),
+                        mirror: AtomicUsize::new(0),
+                        mirrored: AtomicBitSet::new(),
+                        bindings: Bindings {
+                            forward: AtomicKey::new(*keys::constants::Up),
+                            back: AtomicKey::new(*keys::constants::Down),
+                            left: AtomicKey::new(*keys::constants::Left),
+                            right: AtomicKey::new(*keys::constants::Right),
+                            ..Default::default()
+                        },
+                        xdo: std::sync::Mutex::new(None),
+                    },
+                    Controller {
+                        window: AtomicU64::new(0),
+                        mirror: AtomicUsize::new(0),
+                        mirrored: AtomicBitSet::new(),
+                        bindings: Bindings {
+                            forward: AtomicKey::new(*keys::constants::Up),
+                            back: AtomicKey::new(*keys::constants::Down),
+                            left: AtomicKey::new(*keys::constants::Left),
+                            right: AtomicKey::new(*keys::constants::Right),
+                            ..Default::default()
+                        },
+                        xdo: std::sync::Mutex::new(None),
+                    },
                 ]),
                 routes: Default::default(),
                 talking: AtomicBitSet::new(),
                 raw_device: RwLock::new(None),
             })
             .map(|mut state| {
+                // Set up mirrored sets for controllers 2 and 3 mirroring 0.
+                {
+                    let ctls = state.controllers.get_mut().unwrap();
+                    ctls[0].mirrored.insert(2);
+                    ctls[0].mirrored.insert(3);
+                }
                 state.init();
-
                 state
             })
     }
@@ -193,6 +230,7 @@ impl State {
                 mirror: c.mirror,
                 mirrored: AtomicBitSet::new(),
                 bindings: c.bindings.into(),
+                xdo: std::sync::Mutex::new(None),
             })
             .collect();
         for (i, controller) in controllers.iter().enumerate() {
@@ -262,6 +300,16 @@ impl State {
                 }
             }
             route_action!(camera_toggle, Simple);
+            route_action!(tasks, Simple);
+            // debug always sends shift+F1 regardless of main bindings.
+            {
+                let key = ctl.bindings.debug.load(Ordering::SeqCst);
+                if key != 0 {
+                    r_lk.entry(key.into())
+                        .or_insert_with(Vec::new)
+                        .push((ctl_ix, Action::Debug(keys::constants::F1)));
+                }
+            }
         }
     }
 
@@ -275,6 +323,7 @@ impl State {
             || self.main_bindings.throw.load(Ordering::SeqCst) == **key
             || self.main_bindings.talk.load(Ordering::SeqCst) == **key
             || self.main_bindings.camera_toggle.load(Ordering::SeqCst) == **key
+            || self.main_bindings.tasks.load(Ordering::SeqCst) == **key
     }
 
     pub fn reroute_main(&self, old_key: &Key, new_key: &Key) {
@@ -391,6 +440,7 @@ impl Default for Controller {
             mirror: AtomicUsize::new(::std::usize::MAX),
             mirrored: AtomicBitSet::new(),
             bindings: Default::default(),
+            xdo: std::sync::Mutex::new(None),
         }
     }
 }
@@ -403,6 +453,7 @@ impl Controller {
             mirror: AtomicUsize::new(::std::usize::MAX),
             mirrored: AtomicBitSet::new(),
             bindings: template.bindings.clone(),
+            xdo: std::sync::Mutex::new(None),
         }
     }
 
@@ -468,8 +519,12 @@ impl MainBindings {
     pub fn camera_toggle(&self) -> Key {
         self.camera_toggle.load(Ordering::SeqCst).into()
     }
-}
 
+    #[inline(always)]
+    pub fn tasks(&self) -> Key {
+        self.tasks.load(Ordering::SeqCst).into()
+    }
+}
 impl Clone for MainBindings {
     #[inline]
     fn clone(&self) -> Self {
@@ -488,6 +543,7 @@ impl Clone for MainBindings {
             camera_toggle: AtomicKey::new(
                 self.camera_toggle.load(Ordering::SeqCst),
             ),
+            tasks: AtomicKey::new(self.tasks.load(Ordering::SeqCst)),
         }
     }
 }
@@ -496,16 +552,17 @@ impl Default for MainBindings {
     #[inline]
     fn default() -> Self {
         Self {
-            forward: AtomicKey::new(*keys::constants::Up),
-            back: AtomicKey::new(*keys::constants::Down),
-            left: AtomicKey::new(*keys::constants::Left),
-            right: AtomicKey::new(*keys::constants::Right),
-            jump: AtomicKey::new(*keys::constants::Control_L),
+            forward: AtomicKey::new(*keys::constants::w),
+            back: AtomicKey::new(*keys::constants::s),
+            left: AtomicKey::new(*keys::constants::a),
+            right: AtomicKey::new(*keys::constants::d),
+            jump: AtomicKey::new(*keys::constants::space),
             dismount: AtomicKey::new(*keys::constants::Escape),
-            throw: AtomicKey::new(*keys::constants::Delete),
+            throw: AtomicKey::new(*keys::constants::Super_L),
             talk: AtomicKey::new(*keys::constants::Return),
             toggle_mirroring: AtomicKey::new(*keys::constants::Shift_L),
             camera_toggle: AtomicKey::new(*keys::constants::Tab),
+            tasks: AtomicKey::new(*keys::constants::e),
         }
     }
 }
@@ -527,6 +584,8 @@ impl Clone for Bindings {
             camera_toggle: AtomicKey::new(
                 self.camera_toggle.load(Ordering::SeqCst),
             ),
+            debug: AtomicKey::new(self.debug.load(Ordering::SeqCst)),
+            tasks: AtomicKey::new(self.tasks.load(Ordering::SeqCst)),
         }
     }
 }
@@ -535,17 +594,19 @@ impl Default for Bindings {
     #[inline]
     fn default() -> Self {
         Self {
-            forward: AtomicKey::new(*keys::constants::Up),
-            back: AtomicKey::new(*keys::constants::Down),
-            left: AtomicKey::new(*keys::constants::Left),
-            right: AtomicKey::new(*keys::constants::Right),
-            jump: AtomicKey::new(*keys::constants::Control_L),
+            forward: AtomicKey::new(*keys::constants::w),
+            back: AtomicKey::new(*keys::constants::s),
+            left: AtomicKey::new(*keys::constants::a),
+            right: AtomicKey::new(*keys::constants::d),
+            jump: AtomicKey::new(*keys::constants::space),
             dismount: AtomicKey::new(*keys::constants::Escape),
-            throw: AtomicKey::new(*keys::constants::Delete),
-            low_throw: AtomicKey::new(*keys::constants::Insert),
+            throw: AtomicKey::new(*keys::constants::f),
+            low_throw: AtomicKey::new(*keys::constants::r),
             talk: AtomicKey::new(*keys::constants::Return),
-            keepalive: AtomicKey::new(*keys::constants::Home),
+            keepalive: AtomicKey::new(*keys::constants::q),
             camera_toggle: AtomicKey::new(*keys::constants::Tab),
+            debug: AtomicKey::new(*keys::constants::g),
+            tasks: AtomicKey::new(*keys::constants::e),
         }
     }
 }
@@ -558,6 +619,7 @@ impl Action {
             Self::LowThrow(key) => key,
             Self::Talk(key) => key,
             Self::Keepalive(key) => key,
+            Self::Debug(key) => key,
         }
     }
 
@@ -568,6 +630,7 @@ impl Action {
             Self::LowThrow(k) => *k = key,
             Self::Talk(k) => *k = key,
             Self::Keepalive(k) => *k = key,
+            Self::Debug(k) => *k = key,
         }
     }
 }

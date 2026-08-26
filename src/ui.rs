@@ -35,9 +35,11 @@ pub struct Interface {
     label_row: LabelRow,
     pub main_bindings_row: MainBindingsRow,
     pub controller_uis: RwLock<Vec<ControllerUi>>,
+    pub autofill_button: gtk::Button,
 }
 
 struct LabelRow {
+    window_label: gtk::Label,
     forward_label: gtk::Label,
     back_label: gtk::Label,
     left_label: gtk::Label,
@@ -49,10 +51,11 @@ struct LabelRow {
     talk_label: gtk::Label,
     keepalive_label: gtk::Label,
     camera_toggle_label: gtk::Label,
+    debug_label: gtk::Label,
+    tasks_label: gtk::Label,
 }
 
 pub struct MainBindingsRow {
-    pub window_label: gtk::Label,
     pub mirror_label: gtk::Label,
     pub forward: gtk::Button,
     pub back: gtk::Button,
@@ -64,6 +67,8 @@ pub struct MainBindingsRow {
     pub toggle_mirroring: gtk::Button,
     pub keepalive_label: gtk::Label,
     pub camera_toggle: gtk::Button,
+    pub debug_label: gtk::Label,
+    pub tasks: gtk::Button,
 }
 
 pub struct ControllerUi {
@@ -80,6 +85,8 @@ pub struct ControllerUi {
     pub talk: gtk::Button,
     pub keepalive: gtk::Button,
     pub camera_toggle: gtk::Button,
+    pub debug: gtk::Button,
+    pub tasks: gtk::Button,
 }
 
 pub struct Mirror {
@@ -97,7 +104,7 @@ impl Toonmux {
         main_window.set_titlebar(Some(&header.container));
         main_window.add(&interface.container);
 
-        main_window.set_title("toonmux");
+        main_window.set_title("toonmux:pe");
         main_window.set_type_hint(gdk::WindowTypeHint::Dialog);
         // The icon that the app will display.
         //Window::set_default_icon_name("iconname");
@@ -262,6 +269,11 @@ impl Interface {
             label_row,
             main_bindings_row,
             controller_uis,
+            autofill_button: {
+                let btn = gtk::Button::with_label("\u{f575}");
+                btn.style_context().add_class("autofill-button");
+                btn
+            },
         };
         interface.attach();
 
@@ -269,69 +281,39 @@ impl Interface {
     }
 
     fn attach(&mut self) {
-        self.container.attach(
-            &self.main_bindings_row.mirror_label,
-            1,
-            0,
-            1,
-            1,
-        );
-        self.container
-            .attach(&self.label_row.forward_label, 2, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.back_label, 3, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.left_label, 4, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.right_label, 5, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.jump_label, 6, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.dismount_label, 7, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.throw_label, 8, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.low_throw_label, 9, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.talk_label, 10, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.keepalive_label, 11, 0, 1, 1);
-        self.container
-            .attach(&self.label_row.camera_toggle_label, 12, 0, 1, 1);
+        // Row 0: "window" label col 0, column headers cols 1-12
+        self.container.attach(&self.label_row.window_label,            0,  0, 1, 1);
+        self.container.attach(&self.main_bindings_row.mirror_label,     1,  0, 1, 1);
+        self.container.attach(&self.label_row.forward_label,            2,  0, 1, 1);
+        self.container.attach(&self.label_row.back_label,               3,  0, 1, 1);
+        self.container.attach(&self.label_row.left_label,               4,  0, 1, 1);
+        self.container.attach(&self.label_row.right_label,              5,  0, 1, 1);
+        self.container.attach(&self.label_row.jump_label,               6,  0, 1, 1);
+        self.container.attach(&self.label_row.dismount_label,           7,  0, 1, 1);
+        self.container.attach(&self.label_row.throw_label,              8,  0, 1, 1);
+        self.container.attach(&self.label_row.low_throw_label,          9,  0, 1, 1);
+        self.container.attach(&self.label_row.talk_label,               10, 0, 1, 1);
+        self.container.attach(&self.label_row.keepalive_label,          11, 0, 1, 1);
+        self.container.attach(&self.label_row.camera_toggle_label,      12, 0, 1, 1);
+        self.container.attach(&self.label_row.debug_label,              13, 0, 1, 1);
+        self.container.attach(&self.label_row.tasks_label,              14, 0, 1, 1);
 
-        self.container.attach(
-            &self.main_bindings_row.window_label,
-            0,
-            1,
-            1,
-            1,
-        );
-        self.container.attach(
-            &self.main_bindings_row.toggle_mirroring,
-            1,
-            1,
-            1,
-            1,
-        );
-        self.container
-            .attach(&self.main_bindings_row.forward, 2, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.back, 3, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.left, 4, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.right, 5, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.jump, 6, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.dismount, 7, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.throw, 8, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.keepalive_label, 11, 1, 1, 1);
-        self.container
-            .attach(&self.main_bindings_row.camera_toggle, 12, 1, 1, 1);
+        // Row 1: autofill col 0, main bindings cols 1-12
+        self.container.attach(&self.autofill_button,                         0,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.toggle_mirroring,      1,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.forward,               2,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.back,                  3,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.left,                  4,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.right,                 5,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.jump,                  6,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.dismount,              7,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.throw,                 8,  1, 1, 1);
+        self.container.attach(&self.main_bindings_row.keepalive_label,       11, 1, 1, 1);
+        self.container.attach(&self.main_bindings_row.camera_toggle,         12, 1, 1, 1);
+        self.container.attach(&self.main_bindings_row.debug_label,           13, 1, 1, 1);
+        self.container.attach(&self.main_bindings_row.tasks,                 14, 1, 1, 1);
 
+        // Rows 2+: controller rows
         for (i, ctl_ui) in self
             .controller_uis
             .get_mut()
@@ -340,19 +322,21 @@ impl Interface {
             .enumerate()
             .map(|(i, c)| (i as i32, c))
         {
-            self.container.attach(&ctl_ui.pick_window, 0, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.mirror.button, 1, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.forward, 2, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.back, 3, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.left, 4, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.right, 5, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.jump, 6, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.dismount, 7, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.throw, 8, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.low_throw, 9, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.talk, 10, 2 + i, 1, 1);
-            self.container.attach(&ctl_ui.keepalive, 11, 2 + i, 1, 1);
+            self.container.attach(&ctl_ui.pick_window,   0,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.mirror.button, 1,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.forward,       2,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.back,          3,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.left,          4,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.right,         5,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.jump,          6,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.dismount,      7,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.throw,         8,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.low_throw,     9,  2 + i, 1, 1);
+            self.container.attach(&ctl_ui.talk,          10, 2 + i, 1, 1);
+            self.container.attach(&ctl_ui.keepalive,     11, 2 + i, 1, 1);
             self.container.attach(&ctl_ui.camera_toggle, 12, 2 + i, 1, 1);
+            self.container.attach(&ctl_ui.debug,         13, 2 + i, 1, 1);
+            self.container.attach(&ctl_ui.tasks,         14, 2 + i, 1, 1);
         }
     }
 
@@ -383,6 +367,10 @@ impl Interface {
             .attach(&ctl_ui.keepalive, 11, 2 + ctl_ix, 1, 1);
         self.container
             .attach(&ctl_ui.camera_toggle, 12, 2 + ctl_ix, 1, 1);
+        self.container
+            .attach(&ctl_ui.debug, 13, 2 + ctl_ix, 1, 1);
+        self.container
+            .attach(&ctl_ui.tasks, 14, 2 + ctl_ix, 1, 1);
 
         self.controller_uis.write().unwrap().push(ctl_ui);
 
@@ -407,6 +395,7 @@ impl Interface {
 impl LabelRow {
     fn new() -> Self {
         Self {
+            window_label: gtk::Label::new(Some("window")),
             forward_label: gtk::Label::new(Some("forward")),
             back_label: gtk::Label::new(Some("back")),
             left_label: gtk::Label::new(Some("left")),
@@ -418,6 +407,8 @@ impl LabelRow {
             talk_label: gtk::Label::new(Some("talk")),
             keepalive_label: gtk::Label::new(Some("gags")),
             camera_toggle_label: gtk::Label::new(Some("camera")),
+            debug_label: gtk::Label::new(Some("debug")),
+            tasks_label: gtk::Label::new(Some("tasks")),
         }
     }
 }
@@ -425,7 +416,6 @@ impl LabelRow {
 impl MainBindingsRow {
     fn new(state: &State) -> Self {
         Self {
-            window_label: gtk::Label::new(Some("window")),
             mirror_label: gtk::Label::new(Some("mirror")),
             forward: gtk::Button::with_label(
                 key_name(state.main_bindings.forward()).as_str(),
@@ -456,6 +446,12 @@ impl MainBindingsRow {
             )),
             camera_toggle: gtk::Button::with_label(
                 key_name(state.main_bindings.camera_toggle()).as_str(),
+            ),
+            debug_label: gtk::Label::new(Some(
+                &format!("\u{21e7}+{}", key_name(gdk::keys::constants::F1).as_str()),
+            )),
+            tasks: gtk::Button::with_label(
+                key_name(state.main_bindings.tasks()).as_str(),
             ),
         }
     }
@@ -547,6 +543,18 @@ impl ControllerUi {
                 )
                 .as_str(),
             ),
+            debug: gtk::Button::with_label(
+                key_name(
+                    ctl_state.bindings.debug.load(Ordering::SeqCst).into(),
+                )
+                .as_str(),
+            ),
+            tasks: gtk::Button::with_label(
+                key_name(
+                    ctl_state.bindings.tasks.load(Ordering::SeqCst).into(),
+                )
+                .as_str(),
+            ),
         }
     }
 
@@ -565,6 +573,8 @@ impl ControllerUi {
         container.remove(&self.talk);
         container.remove(&self.keepalive);
         container.remove(&self.camera_toggle);
+        container.remove(&self.debug);
+        container.remove(&self.tasks);
     }
 }
 
